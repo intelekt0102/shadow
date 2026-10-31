@@ -1,6 +1,7 @@
 name: Build EXE
 
 on: [push]
+
 jobs:
   build-windows:
     runs-on: windows-latest
