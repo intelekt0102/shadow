@@ -23,6 +23,10 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile --windowed --collect-all customtkinter --collect-all imageio_ffmpeg --copy-metadata imageio_ffmpeg main.py
 
+      - name: Verify and Locate EXE
+        run: |
+          dir dist
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
