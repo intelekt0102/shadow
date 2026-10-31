@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install customtkinter speech_recognition imageio-ffmpeg pydub pyinstaller
+          pip install customtkinter SpeechRecognition imageio-ffmpeg pydub pyinstaller
 
       - name: Build with PyInstaller
         run: |
