@@ -1,0 +1,5206 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Shadowing Studio — PDF + Audio</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+  />
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    /* =========================================================
+       PDF VIEWER
+    ========================================================= */
+
+    #pdfContainer {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      background: #1f2937;
+      cursor: grab;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1f2937;
+      user-select: none;
+    }
+
+    #pdfContainer.dragging {
+      cursor: grabbing;
+    }
+
+    #pdfPageWrapper {
+      /* Keng (zoom qilingan) sahifalar ham chapga kesilmasdan scroll bo'lishi uchun */
+      width: max-content;
+      min-width: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 24px 100px;
+    }
+
+    /* Barcha sahifalar ketma-ket bitta uzun vertikal ro'yxatda */
+    #pdfPagesList {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    #pdfPagesList.hidden {
+      display: none;
+    }
+
+    .pdf-page {
+      position: relative;
+      flex: none;
+      background: #ffffff;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+
+    .pdf-page-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 600;
+      color: #cbd5e1;
+      pointer-events: none;
+    }
+
+    .pdf-page canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* =========================================================
+       GENERAL PDF BUTTON
+    ========================================================= */
+
+    .pdf-btn {
+      height: 32px;
+      min-width: 32px;
+      padding: 0 9px;
+
+      border-radius: 7px;
+      border: 1px solid #475569;
+
+      background: #334155;
+      color: white;
+
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+
+      cursor: pointer;
+      transition: 0.15s;
+
+      font-size: 13px;
+    }
+
+    .pdf-btn:hover:not(:disabled) {
+      background: #475569;
+    }
+
+    .pdf-btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    .pdf-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* =========================================================
+       AUDIO PAGE CONTROL
+    ========================================================= */
+    .pdf-page-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .audio-page-input {
+      width: 48px;
+      height: 28px;
+
+      border: 1px solid #475569;
+      border-radius: 6px;
+
+      background: #0f172a;
+      color: white;
+
+      text-align: center;
+      outline: none;
+
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .audio-page-input:focus {
+      border-color: #38bdf8;
+    }
+
+    .audio-page-count {
+      min-width: 24px;
+      color: white;
+      font-size: 13px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .page-separator {
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .player-divider {
+      width: 1px;
+      height: 25px;
+      background: #475569;
+      margin: 0 3px;
+      flex-shrink: 0;
+    }
+
+    /* =========================================================
+       AUDIO PLAYER
+    ========================================================= */
+
+    #audioPlayerBar {
+      position: fixed;
+
+      left: 50%;
+      bottom: 8px;
+
+      transform: translateX(-50%);
+
+      z-index: 1000;
+
+      min-height: 56px;
+      max-width: calc(100vw - 16px);
+
+      padding: 7px 10px;
+
+      display: flex;
+      align-items: center;
+      gap: 7px;
+
+      background: rgba(30, 41, 59, 0.96);
+
+      border: 1px solid rgba(100, 116, 139, 0.75);
+      border-radius: 16px;
+
+      box-shadow:
+        0 12px 35px rgba(0, 0, 0, 0.45),
+        0 3px 10px rgba(0, 0, 0, 0.3);
+
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+
+      white-space: nowrap;
+    }
+
+    .audio-btn {
+      flex-shrink: 0;
+
+      width: 36px;
+      height: 36px;
+
+      border: 0;
+      border-radius: 8px;
+
+      background: #334155;
+      color: white;
+
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      cursor: pointer;
+
+      transition:
+        background 0.15s,
+        transform 0.1s,
+        opacity 0.15s;
+    }
+
+    .audio-btn:hover:not(:disabled) {
+      background: #475569;
+    }
+
+    .audio-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    .audio-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .play-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #0ea5e9;
+
+      box-shadow:
+        0 4px 12px rgba(14, 165, 233, 0.3);
+    }
+
+    .play-btn:hover:not(:disabled) {
+      background: #38bdf8;
+    }
+
+    .audio-btn.active {
+      background: #10b981;
+      color: white;
+    }
+
+    .audio-btn.danger:hover:not(:disabled) {
+      background: #dc2626;
+    }
+
+    #currentTime,
+    #duration {
+      flex-shrink: 0;
+      width: 38px;
+
+      font-size: 11px;
+      color: #cbd5e1;
+
+      font-variant-numeric: tabular-nums;
+    }
+
+    #currentTime {
+      text-align: right;
+    }
+
+    #duration {
+      text-align: left;
+    }
+
+    #progress {
+      width: 360px;
+      min-width: 100px;
+    }
+
+    #volume {
+      width: 55px;
+    }
+
+    .audio-range {
+      height: 4px;
+      cursor: pointer;
+      accent-color: #38bdf8;
+    }
+
+    #speedBtn {
+      min-width: 43px;
+      padding: 0 7px;
+
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    #audioStatus {
+      min-width: 35px;
+      max-width: 150px;
+
+      font-size: 11px;
+      font-weight: bold;
+
+      color: #38bdf8;
+
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* =========================================================
+       RESPONSIVE PLAYER
+    ========================================================= */
+
+    @media (max-width: 1100px) {
+      #progress {
+        width: 260px;
+      }
+
+      #audioStatus {
+        max-width: 100px;
+      }
+    }
+
+    @media (max-width: 850px) {
+      #audioPlayerBar {
+        gap: 5px;
+        padding: 6px 8px;
+      }
+
+      #progress {
+        width: 180px;
+      }
+
+      #volume {
+        width: 42px;
+      }
+
+      #audioStatus {
+        display: none;
+      }
+    }
+
+    @media (max-width: 650px) {
+      #audioPlayerBar {
+        width: calc(100vw - 10px);
+        max-width: calc(100vw - 10px);
+
+        bottom: 5px;
+
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        border-radius: 13px;
+
+        scrollbar-width: none;
+      }
+
+      #audioPlayerBar::-webkit-scrollbar {
+        display: none;
+      }
+
+      #progress {
+        width: 130px;
+        min-width: 130px;
+      }
+
+      #volume {
+        width: 38px;
+        min-width: 38px;
+      }
+
+      .audio-btn {
+        width: 33px;
+        height: 33px;
+      }
+
+      .play-btn {
+        width: 37px;
+        height: 37px;
+      }
+
+      #currentTime,
+      #duration {
+        width: 34px;
+        font-size: 10px;
+      }
+
+      .audio-page-input {
+        width: 38px;
+      }
+
+      #pdfPageWrapper {
+        padding: 16px 16px 100px;
+      }
+    }
+  
+    /* =========================================================
+       PLAYLIST
+    ========================================================= */
+
+    #playlistBtn {
+      position: relative;
+    }
+
+    #playlistBadge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: #0ea5e9;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      display: none;
+      pointer-events: none;
+    }
+
+    #playlistPanel {
+      position: fixed;
+      left: 50%;
+      bottom: 76px;
+      transform: translateX(-50%);
+      z-index: 999;
+      width: min(460px, calc(100vw - 16px));
+      max-height: min(50vh, 420px);
+      display: flex;
+      flex-direction: column;
+      background: rgba(30, 41, 59, 0.98);
+      border: 1px solid rgba(100, 116, 139, 0.75);
+      border-radius: 14px;
+      box-shadow:
+        0 12px 35px rgba(0, 0, 0, 0.45),
+        0 3px 10px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      overflow: hidden;
+    }
+
+    #playlistPanel.hidden {
+      display: none;
+    }
+
+    .playlist-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #334155;
+    }
+
+    #playlistTitle {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pl-btn {
+      flex: none;
+      border: 0;
+      border-radius: 8px;
+      background: #334155;
+      color: #ffffff;
+      font-size: 12px;
+      padding: 6px 9px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    .pl-btn:hover:not(:disabled) {
+      background: #475569;
+    }
+
+    .pl-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .pl-btn.on {
+      background: #0ea5e9;
+    }
+
+    #playlistList {
+      list-style: none;
+      margin: 0;
+      padding: 4px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 transparent;
+    }
+
+    .playlist-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .playlist-item:hover {
+      background: #334155;
+    }
+
+    .playlist-item.current {
+      background: rgba(14, 165, 233, 0.18);
+      color: #ffffff;
+    }
+
+    .playlist-num {
+      flex: none;
+      width: 22px;
+      text-align: center;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .playlist-item.current .playlist-num {
+      color: #38bdf8;
+    }
+
+    .playlist-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .playlist-remove {
+      flex: none;
+      width: 24px;
+      height: 24px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #94a3b8;
+      cursor: pointer;
+    }
+
+    .playlist-remove:hover {
+      background: #475569;
+      color: #ffffff;
+    }
+
+    .playlist-empty {
+      padding: 18px 10px;
+      text-align: center;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- =======================================================
+       HEADER
+  ======================================================== -->
+
+  <header
+    class="h-[58px] shrink-0 bg-slate-950 border-b border-slate-700
+           flex items-center justify-between px-4"
+  >
+
+    <div class="flex items-center gap-3">
+
+      <div
+        class="w-9 h-9 rounded-lg bg-sky-500
+               flex items-center justify-center"
+      >
+        <i class="fa-solid fa-headphones text-white"></i>
+      </div>
+
+      <div>
+        <h1 class="font-bold text-sm md:text-base">
+          Shadowing Studio
+        </h1>
+
+        <p class="text-[10px] md:text-xs text-slate-400">
+          PDF + Audio Practice
+        </p>
+      </div>
+
+    </div>
+
+    <div
+      class="pdf-page-control"
+      title="PDF sahifalar bo'ylab harakatlanish"
+    >
+      <button
+        id="prevPageBtn"
+        class="pdf-btn"
+        title="Oldingi sahifa"
+        type="button"
+      >
+        <i class="fa-solid fa-arrow-left"></i>
+      </button>
+
+      <input
+        id="pageInput"
+        class="audio-page-input"
+        type="number"
+        min="1"
+        value="1"
+        title="Sahifa raqami"
+        aria-label="PDF sahifa raqami"
+        inputmode="numeric"
+        autocomplete="off"
+      />
+
+      <span class="page-separator">/</span>
+
+      <span
+        id="pageCount"
+        class="audio-page-count"
+      >
+        0
+      </span>
+
+      <button
+        id="nextPageBtn"
+        class="pdf-btn"
+        title="Keyingi sahifa"
+        type="button"
+      >
+        <i class="fa-solid fa-arrow-right"></i>
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2">
+
+
+      <!-- PDF INPUT -->
+      <input
+        id="pdfInput"
+        type="file"
+        accept="application/pdf,.pdf"
+        class="hidden"
+      />
+
+      <button
+        id="openPdfBtn"
+        class="pdf-btn"
+        title="PDF ochish"
+        type="button"
+      >
+        <i class="fa-solid fa-file-pdf"></i>
+        <span class="hidden sm:inline">PDF</span>
+      </button>
+
+      <!-- AUDIO INPUT -->
+      <input
+        id="audioInput"
+        type="file"
+        multiple
+        accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm"
+        class="hidden"
+      />
+
+      <button
+        id="openAudioBtn"
+        class="pdf-btn"
+        title="Audio ochish (bir nechta tanlash mumkin)"
+        type="button"
+      >
+        <i class="fa-solid fa-music"></i>
+        <span class="hidden sm:inline">Audio</span>
+      </button>
+
+    </div>
+
+  </header>
+
+
+  <!-- =======================================================
+       MAIN
+  ======================================================== -->
+
+  <main class="flex flex-col" style="height: calc(100vh - 58px); height: calc(100dvh - 58px);">
+
+    <section class="flex-1 min-h-0 bg-gray-800 flex flex-col">
+
+      <!-- ===================================================
+           PDF VIEWER
+      ==================================================== -->
+
+      <div id="pdfContainer">
+
+        <!-- Placeholder -->
+
+        <div
+          id="pdfPlaceholder"
+          class="absolute inset-0 flex items-center justify-center"
+        >
+
+          <div class="text-center px-5">
+
+            <div
+              class="w-20 h-20 rounded-2xl
+                     bg-slate-700/60
+                     flex items-center justify-center
+                     mx-auto mb-4"
+            >
+              <i
+                class="fa-solid fa-file-pdf
+                       text-4xl text-slate-400"
+              ></i>
+            </div>
+
+            <h2
+              class="text-lg font-semibold text-slate-300"
+            >
+              PDF faylni oching
+            </h2>
+
+            <p
+              class="text-sm text-slate-500 mt-2"
+            >
+              Yuqoridagi PDF tugmasi orqali
+              hujjat tanlang
+            </p>
+
+            <p
+              class="text-xs text-slate-600 mt-3"
+            >
+              Ctrl + O — PDF ochish
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <!-- PDF canvas wrapper -->
+
+        <div id="pdfPageWrapper">
+
+          <!-- Barcha PDF sahifalari shu yerga ketma-ket chiziladi -->
+          <div
+            id="pdfPagesList"
+            class="hidden"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- =======================================================
+       FLOATING AUDIO PLAYER
+  ======================================================== -->
+
+  <div id="audioPlayerBar">
+
+    <!-- PDF PAGE NAVIGATION -->
+  
+
+    <!-- AUDIO CONTROLS -->
+
+    <button
+      id="prevAudioBtn"
+      class="audio-btn"
+      title="Oldingi audio / boshiga (P)"
+      type="button"
+    >
+      <i class="fa-solid fa-backward-step"></i>
+    </button>
+
+
+    <button
+      id="playBtn"
+      class="audio-btn play-btn"
+      title="Play / Pause"
+      type="button"
+    >
+      <i class="fa-solid fa-play"></i>
+    </button>
+
+
+    <button
+      id="nextAudioBtn"
+      class="audio-btn"
+      title="Keyingi audio (N)"
+      type="button"
+    >
+      <i class="fa-solid fa-forward-step"></i>
+    </button>
+
+    <!-- PLAYLIST -->
+
+    <button
+      id="playlistBtn"
+      class="audio-btn"
+      title="Playlist (L)"
+      type="button"
+    >
+      <i class="fa-solid fa-list-ul"></i>
+      <span id="playlistBadge"></span>
+    </button>
+
+
+    <span id="currentTime">
+      0:00
+    </span>
+
+
+    <input
+      id="progress"
+      class="audio-range"
+      type="range"
+      min="0"
+      max="0"
+      step="0.1"
+      value="0"
+      aria-label="Audio progress"
+    />
+
+
+    <span id="duration">
+      0:00
+    </span>
+
+
+    <!-- SPEED -->
+
+    <button
+      id="speedBtn"
+      class="audio-btn"
+      title="Playback speed"
+      type="button"
+    >
+      1x
+    </button>
+
+
+    <!-- MUTE -->
+
+    <button
+      id="muteBtn"
+      class="audio-btn"
+      title="Mute"
+      type="button"
+    >
+      <i class="fa-solid fa-volume-high"></i>
+    </button>
+
+
+    <!-- VOLUME -->
+
+    <input
+      id="volume"
+      class="audio-range"
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value="1"
+      title="Volume"
+      aria-label="Volume"
+    />
+
+
+    <!-- NORMAL LOOP -->
+
+    <button
+      id="loopBtn"
+      class="audio-btn"
+      title="Audio Loop"
+      type="button"
+    >
+      <i class="fa-solid fa-repeat"></i>
+    </button>
+
+
+    <!-- A -->
+
+    <button
+      id="btnA"
+      class="audio-btn"
+      title="A nuqta"
+      type="button"
+    >
+      A
+    </button>
+
+
+    <!-- B -->
+
+    <button
+      id="btnB"
+      class="audio-btn"
+      title="B nuqta"
+      type="button"
+    >
+      B
+    </button>
+
+
+    <!-- CLEAR A-B -->
+
+    <button
+      id="clearLoopBtn"
+      class="audio-btn danger"
+      title="A-B loopni tozalash"
+      type="button"
+    >
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+
+    <!-- STATUS -->
+
+    <span
+      id="audioStatus"
+      aria-live="polite"
+    ></span>
+
+  </div>
+
+
+  <!-- =======================================================
+       AUDIO ELEMENT
+  ======================================================== -->
+
+  <!-- =======================================================
+       PLAYLIST PANEL
+  ======================================================== -->
+
+  <div
+    id="playlistPanel"
+    class="hidden"
+    role="dialog"
+    aria-label="Playlist"
+  >
+
+    <div class="playlist-head">
+
+      <span id="playlistTitle">Playlist</span>
+
+      <button
+        id="playlistAddBtn"
+        class="pl-btn"
+        type="button"
+        title="Ro'yxatga audio qo'shish"
+      >
+        <i class="fa-solid fa-plus"></i>
+        <span>Qo'shish</span>
+      </button>
+
+      <button
+        id="playlistAutoBtn"
+        class="pl-btn on"
+        type="button"
+        title="Audio tugagach keyingisiga avtomatik o'tish"
+      >
+        <i class="fa-solid fa-forward"></i>
+        <span>Avto</span>
+      </button>
+
+      <button
+        id="playlistClearBtn"
+        class="pl-btn"
+        type="button"
+        title="Ro'yxatni tozalash"
+      >
+        <i class="fa-solid fa-trash"></i>
+      </button>
+
+      <button
+        id="playlistCloseBtn"
+        class="pl-btn"
+        type="button"
+        title="Yopish"
+      >
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+    </div>
+
+    <ol id="playlistList"></ol>
+
+  </div>
+
+  <audio id="audio" preload="metadata"></audio>
+
+
+  <!-- =======================================================
+       JAVASCRIPT
+  ======================================================== -->
+
+  <script>
+
+    "use strict";
+
+
+    /* =======================================================
+       GLOBAL ERROR PROTECTION
+    ======================================================== */
+
+    window.addEventListener(
+      "error",
+      (event) => {
+
+        console.error(
+          "Application error:",
+          event.error || event.message
+        );
+
+      }
+    );
+
+
+    window.addEventListener(
+      "unhandledrejection",
+      (event) => {
+
+        console.error(
+          "Unhandled promise rejection:",
+          event.reason
+        );
+
+        event.preventDefault();
+
+      }
+    );
+
+
+    /* =======================================================
+       PDF.JS AVAILABILITY
+    ======================================================== */
+
+    const pdfJsAvailable =
+      typeof window.pdfjsLib !== "undefined";
+
+
+    if (pdfJsAvailable) {
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    }
+
+
+    /* =======================================================
+       PDF ELEMENTS
+    ======================================================== */
+
+    const pdfInput =
+      document.getElementById("pdfInput");
+
+    const openPdfBtn =
+      document.getElementById("openPdfBtn");
+
+    const pdfContainer =
+      document.getElementById("pdfContainer");
+
+    const pdfPagesList =
+      document.getElementById("pdfPagesList");
+
+    const pdfPlaceholder =
+      document.getElementById("pdfPlaceholder");
+
+    const pdfPageWrapper =
+      document.getElementById("pdfPageWrapper");
+
+    const prevPageBtn =
+      document.getElementById("prevPageBtn");
+
+    const nextPageBtn =
+      document.getElementById("nextPageBtn");
+
+    const pageInput =
+      document.getElementById("pageInput");
+
+    const pageCount =
+      document.getElementById("pageCount");
+
+
+    /* =======================================================
+       PDF STATE
+    ======================================================== */
+
+    let pdfDoc = null;
+
+    let pageNum = 1;
+
+    let scale = 1.2;
+
+    const MIN_ZOOM = 0.5;
+
+    const MAX_ZOOM = 3;
+
+    const ZOOM_STEP = 0.1;
+
+    let pdfLoadToken = 0;
+
+
+    /* =======================================================
+       PDF HELPERS
+    ======================================================== */
+
+    function isPdfFile(file) {
+
+      if (!file) {
+        return false;
+      }
+
+      const type =
+        String(file.type || "").toLowerCase();
+
+      const name =
+        String(file.name || "").toLowerCase();
+
+      return (
+        type === "application/pdf" ||
+        name.endsWith(".pdf")
+      );
+
+    }
+
+
+    function destroyPdfDoc(doc) {
+
+      if (
+        doc &&
+        typeof doc.destroy === "function"
+      ) {
+
+        try {
+
+          const result =
+            doc.destroy();
+
+          if (
+            result &&
+            typeof result.catch === "function"
+          ) {
+            result.catch(() => {});
+          }
+
+        } catch (_) {}
+
+      }
+
+    }
+
+    function resetPdfViewer() {
+
+      const previousDoc = pdfDoc;
+
+      pdfDoc = null;
+
+      clearPages();
+
+      destroyPdfDoc(previousDoc);
+
+      pageNum = 1;
+
+      pageCount.textContent = "0";
+
+      pageInput.value = "1";
+
+      pageInput.removeAttribute("max");
+
+      prevPageBtn.disabled = true;
+
+      nextPageBtn.disabled = true;
+
+      pdfPlaceholder.classList.remove("hidden");
+
+    }
+
+    function showPdfStatus(text) {
+
+      console.log(
+        "PDF:",
+        text
+      );
+
+    }
+
+function updatePdfButtons() {
+
+  /*
+    ↑ va ↓ endi PDF sahifasini almashtirmaydi.
+    Ular faqat scroll qiladi.
+
+    Shuning uchun PDF ochilgan bo'lsa,
+    ikkala tugma ham faol.
+  */
+
+  const hasPdf = Boolean(pdfDoc);
+
+  prevPageBtn.disabled = !hasPdf;
+  nextPageBtn.disabled = !hasPdf;
+
+}
+
+
+    /* =======================================================
+       PDF OPEN
+    ======================================================== */
+
+    openPdfBtn.addEventListener(
+      "click",
+      () => {
+
+        if (!pdfJsAvailable) {
+
+          alert(
+            "PDF viewer yuklanmadi. Internet ulanishini tekshiring va sahifani qayta yuklang."
+          );
+
+          return;
+
+        }
+
+        pdfInput.click();
+
+      }
+    );
+
+
+    pdfInput.addEventListener(
+      "change",
+      async (e) => {
+
+        const file =
+          e.target.files &&
+          e.target.files[0];
+
+        if (!file) {
+          return;
+        }
+
+
+        if (!isPdfFile(file)) {
+
+          alert(
+            "Iltimos, PDF fayl tanlang."
+          );
+
+          pdfInput.value = "";
+
+          return;
+
+        }
+
+
+        if (!pdfJsAvailable) {
+
+          alert(
+            "PDF viewer kutubxonasi yuklanmadi. Internet ulanishini tekshiring."
+          );
+
+          pdfInput.value = "";
+
+          return;
+
+        }
+
+
+        const currentToken =
+          ++pdfLoadToken;
+
+
+        /*
+          Eski PDF'ni darhol bekor qilamiz.
+        */
+
+        const previousDoc = pdfDoc;
+
+        pdfDoc = null;
+
+        clearPages();
+
+        destroyPdfDoc(previousDoc);
+
+        pageNum = 1;
+
+        pdfPlaceholder.classList.remove(
+          "hidden"
+        );
+
+        pageCount.textContent =
+          "...";
+
+        pageInput.value =
+          "1";
+
+        pageInput.removeAttribute(
+          "max"
+        );
+
+        updatePdfButtons();
+
+
+        try {
+
+          const arrayBuffer =
+            await file.arrayBuffer();
+
+          // Xuddi shu faylni qayta tanlash mumkin bo'lishi uchun
+          pdfInput.value = "";
+
+
+          /*
+            Foydalanuvchi bu orada boshqa PDF tanlagan bo'lsa,
+            eski request natijasi qo'llanilmaydi.
+          */
+
+          if (currentToken !== pdfLoadToken) {
+            return;
+          }
+
+
+          const loadingTask =
+            pdfjsLib.getDocument({
+              data: arrayBuffer
+            });
+
+
+          const loadedPdf =
+            await loadingTask.promise;
+
+
+          if (currentToken !== pdfLoadToken) {
+
+            try {
+              await loadedPdf.destroy();
+            } catch (_) {}
+
+            return;
+
+          }
+
+
+          pdfDoc =
+            loadedPdf;
+
+          pageNum = 1;
+
+          pageCount.textContent =
+            String(pdfDoc.numPages);
+
+          pageInput.max =
+            String(pdfDoc.numPages);
+
+          pageInput.value =
+            "1";
+
+          pdfPlaceholder.classList.add(
+            "hidden"
+          );
+
+          /*
+            Barcha sahifalar uchun joy (placeholder) yaratiladi,
+            ko'rinib turganlari esa lazy tarzda chiziladi.
+          */
+
+          await buildPages(
+            currentToken
+          );
+
+
+          if (currentToken !== pdfLoadToken) {
+            return;
+          }
+
+
+          updatePdfButtons();
+
+
+          showPdfStatus(
+            `${pdfDoc.numPages} sahifa`
+          );
+
+        } catch (error) {
+
+          if (currentToken !== pdfLoadToken) {
+            return;
+          }
+
+
+          console.error(
+            "PDF error:",
+            error
+          );
+
+
+          resetPdfViewer();
+
+
+          alert(
+            "PDF faylni ochishda xatolik yuz berdi. Fayl buzilgan yoki PDF formatida bo'lmasligi mumkin."
+          );
+
+        }
+
+      }
+    );
+
+
+    /* =======================================================
+       CONTINUOUS VERTICAL SCROLL — BARCHA SAHIFALAR KETMA-KET
+    ======================================================== */
+
+    /*
+      Har bir sahifa uchun { num, el, baseW, baseH, canvas, ... } obyekti.
+      Sahifalar bir marta DOM'ga joylanadi (to'g'ri o'lchamda),
+      canvas faqat ekranga yaqin sahifalar uchun chiziladi (lazy render),
+      uzoqlashganda esa xotirani tejash uchun bo'shatiladi.
+    */
+
+    const pageViews = [];
+
+    let pageTops = [];
+
+    let pageHeights = [];
+
+    let pageObserver = null;
+
+    /*
+      navLock — tugma / input / klaviatura orqali sahifaga o'tilganda
+      pleyerdagi raqam aynan tanlangan sahifada qoladi.
+      Foydalanuvchi o'zi scroll qila boshlagach (g'ildirak, touch,
+      sichqoncha, ↑ ↓) lock yechiladi va avto-singkron davom etadi.
+    */
+
+    let navLock = false;
+
+    let scrollTicking = false;
+
+    function sizePageView(view) {
+
+      view.el.style.width =
+        Math.floor(view.baseW * scale) + "px";
+
+      view.el.style.height =
+        Math.floor(view.baseH * scale) + "px";
+
+    }
+
+    function releasePageView(view) {
+
+      view.visible = false;
+
+      if (view.renderTask) {
+
+        try {
+          view.renderTask.cancel();
+        } catch (_) {}
+
+      }
+
+      if (view.canvas) {
+
+        view.canvas.width = 0;
+        view.canvas.height = 0;
+
+        view.canvas.remove();
+
+        view.canvas = null;
+
+      }
+
+      view.renderedScale = 0;
+
+      // Xato holati faqat shu oyna ichida saqlanadi: sahifa ekrandan chiqib
+      // qaytganda yoki zoom o'zgarganda yana bir bor urinib ko'riladi.
+      view.failedScale = 0;
+
+      if (view.label) {
+
+        view.label.textContent = String(view.num);
+
+      }
+
+    }
+
+    function clearPages() {
+
+      if (pageObserver) {
+
+        pageObserver.disconnect();
+
+        pageObserver = null;
+
+      }
+
+      pageViews.forEach(releasePageView);
+
+      pageViews.length = 0;
+
+      pageTops = [];
+
+      pageHeights = [];
+
+      pdfPagesList.replaceChildren();
+
+      pdfPagesList.classList.add("hidden");
+
+      navLock = false;
+
+    }
+
+    function recalcLayout() {
+
+      const containerTop =
+        pdfContainer.getBoundingClientRect().top;
+
+      const st =
+        pdfContainer.scrollTop;
+
+      pageTops = new Array(pageViews.length);
+
+      pageHeights = new Array(pageViews.length);
+
+      for (let i = 0; i < pageViews.length; i++) {
+
+        const rect =
+          pageViews[i].el.getBoundingClientRect();
+
+        pageTops[i] =
+          rect.top - containerTop + st;
+
+        pageHeights[i] =
+          rect.height;
+
+      }
+
+    }
+
+    async function buildPages(loadToken) {
+
+      const doc = pdfDoc;
+
+      if (!doc) {
+        return;
+      }
+
+      const total = doc.numPages;
+
+      const sizes = new Array(total);
+
+      const BATCH = 40;
+
+      for (let start = 1; start <= total; start += BATCH) {
+
+        const end =
+          Math.min(total, start + BATCH - 1);
+
+        const jobs = [];
+
+        for (let n = start; n <= end; n++) {
+
+          jobs.push(
+            doc.getPage(n).then(
+              (page) => {
+
+                const vp =
+                  page.getViewport({ scale: 1 });
+
+                sizes[n - 1] = {
+                  w: vp.width,
+                  h: vp.height
+                };
+
+              }
+            ).catch(
+              () => {
+
+                sizes[n - 1] =
+                  sizes[0] || { w: 595, h: 842 };
+
+              }
+            )
+          );
+
+        }
+
+        await Promise.all(jobs);
+
+        if (
+          loadToken !== pdfLoadToken ||
+          doc !== pdfDoc
+        ) {
+          return;
+        }
+
+      }
+
+      clearPages();
+
+      const frag =
+        document.createDocumentFragment();
+
+      for (let i = 0; i < total; i++) {
+
+        const size =
+          sizes[i] || { w: 595, h: 842 };
+
+        const holder =
+          document.createElement("div");
+
+        holder.className = "pdf-page";
+
+        holder.dataset.page = String(i + 1);
+
+        const label =
+          document.createElement("span");
+
+        label.className = "pdf-page-label";
+
+        label.textContent = String(i + 1);
+
+        holder.appendChild(label);
+
+        const view = {
+          num: i + 1,
+          el: holder,
+          label: label,
+          failedScale: 0,
+          baseW: size.w,
+          baseH: size.h,
+          canvas: null,
+          renderedScale: 0,
+          rendering: false,
+          renderTask: null,
+          visible: false
+        };
+
+        holder.__view = view;
+
+        sizePageView(view);
+
+        pageViews.push(view);
+
+        frag.appendChild(holder);
+
+      }
+
+      pdfPagesList.appendChild(frag);
+
+      pdfPagesList.classList.remove("hidden");
+
+      pdfContainer.scrollTop = 0;
+
+      pdfContainer.scrollLeft = 0;
+
+      recalcLayout();
+
+      pageObserver = new IntersectionObserver(
+        (entries) => {
+
+          for (const entry of entries) {
+
+            const view =
+              entry.target.__view;
+
+            if (!view) {
+              continue;
+            }
+
+            if (entry.isIntersecting) {
+
+              view.visible = true;
+
+              renderPageView(view);
+
+            } else {
+
+              releasePageView(view);
+
+            }
+
+          }
+
+        },
+        {
+          root: pdfContainer,
+          rootMargin: "150% 0px 150% 0px",
+          threshold: 0
+        }
+      );
+
+      pageViews.forEach(
+        (view) => pageObserver.observe(view.el)
+      );
+
+      pageNum = 1;
+
+      pageInput.value = "1";
+
+    }
+
+    /* =======================================================
+       RENDER SINGLE PAGE VIEW
+    ======================================================== */
+
+    async function renderPageView(view) {
+
+      const doc = pdfDoc;
+
+      const loadToken = pdfLoadToken;
+
+      const renderScale = scale;
+
+      if (!doc || !view.visible) {
+        return;
+      }
+
+      if (view.rendering) {
+        return;
+      }
+
+      if (view.canvas && view.renderedScale === renderScale) {
+        return;
+      }
+
+      // Shu o'lchamda chizish allaqachon xato bergan — cheksiz qayta urinmaymiz
+      if (view.failedScale === renderScale) {
+        return;
+      }
+
+      view.rendering = true;
+
+      try {
+
+        const page =
+          await doc.getPage(view.num);
+
+        if (
+          loadToken !== pdfLoadToken ||
+          doc !== pdfDoc ||
+          !view.visible ||
+          renderScale !== scale
+        ) {
+          return;
+        }
+
+        const viewport =
+          page.getViewport({ scale: renderScale });
+
+        // Retina / yuqori zichlikdagi ekranlar uchun (xotira limiti bilan)
+        const MAX_PIXELS = 16777216;
+
+        const outputScale =
+          Math.min(
+            window.devicePixelRatio || 1,
+            Math.sqrt(
+              MAX_PIXELS /
+              (viewport.width * viewport.height)
+            )
+          );
+
+        // Yangi canvas ekrandan tashqarida chiziladi, keyin almashtiriladi
+        // (shunda zoom paytida miltillash bo'lmaydi)
+
+        const off =
+          document.createElement("canvas");
+
+        off.width =
+          Math.floor(viewport.width * outputScale);
+
+        off.height =
+          Math.floor(viewport.height * outputScale);
+
+        const context =
+          off.getContext("2d");
+
+        if (!context) {
+          throw new Error("Canvas 2D context topilmadi.");
+        }
+
+        const task =
+          page.render({
+            canvasContext: context,
+            viewport: viewport,
+            transform:
+              outputScale !== 1
+                ? [outputScale, 0, 0, outputScale, 0, 0]
+                : null
+          });
+
+        view.renderTask = task;
+
+        await task.promise;
+
+        if (
+          loadToken !== pdfLoadToken ||
+          doc !== pdfDoc ||
+          !view.visible
+        ) {
+          off.width = 0;
+          off.height = 0;
+          return;
+        }
+
+        if (view.canvas) {
+          view.canvas.remove();
+        }
+
+        view.el.appendChild(off);
+
+        view.canvas = off;
+
+        view.renderedScale = renderScale;
+
+      } catch (error) {
+
+        const cancelled =
+          error &&
+          error.name === "RenderingCancelledException";
+
+        if (
+          !cancelled &&
+          loadToken === pdfLoadToken &&
+          doc === pdfDoc
+        ) {
+
+          console.error("PDF render error:", error);
+
+          view.failedScale = renderScale;
+
+          if (view.label) {
+
+            view.label.textContent =
+              view.num + " · sahifani ko'rsatib bo'lmadi";
+
+          }
+
+          showPdfStatus("Sahifani ko'rsatishda xatolik");
+
+        }
+
+      } finally {
+
+        view.rendering = false;
+
+        view.renderTask = null;
+
+        // Render paytida zoom o'zgargan bo'lsa — yangi o'lchamda qayta chizamiz
+        if (
+          loadToken === pdfLoadToken &&
+          doc === pdfDoc &&
+          view.visible &&
+          view.renderedScale !== scale
+        ) {
+
+          renderPageView(view);
+
+        }
+
+      }
+
+    }
+
+    /* =======================================================
+       AUTO-SYNC: JORIY SAHIFANI SCROLL BO'YICHA ANIQLASH
+    ======================================================== */
+
+    function computeCurrentPage() {
+
+      const n = pageViews.length;
+
+      if (!n) {
+        return 1;
+      }
+
+      const st = pdfContainer.scrollTop;
+
+      const vh = pdfContainer.clientHeight;
+
+      const vb = st + vh;
+
+      // Eng tepada — 1-sahifa, eng pastda — oxirgi sahifa
+      if (st <= 1) {
+        return 1;
+      }
+
+      if (vb >= pdfContainer.scrollHeight - 2) {
+        return n;
+      }
+
+      // Ekranda eng ko'p maydonni egallagan sahifa
+      let lo = 0;
+
+      let hi = n - 1;
+
+      while (lo < hi) {
+
+        const mid = (lo + hi) >> 1;
+
+        if (pageTops[mid] + pageHeights[mid] > st) {
+          hi = mid;
+        } else {
+          lo = mid + 1;
+        }
+
+      }
+
+      let best = lo + 1;
+
+      let bestOverlap = -1;
+
+      for (let i = lo; i < n; i++) {
+
+        const top = pageTops[i];
+
+        if (top >= vb) {
+          break;
+        }
+
+        const bottom = top + pageHeights[i];
+
+        const overlap =
+          Math.min(bottom, vb) - Math.max(top, st);
+
+        if (overlap > bestOverlap) {
+
+          bestOverlap = overlap;
+
+          best = i + 1;
+
+        }
+
+      }
+
+      return best;
+
+    }
+
+    function setCurrentPage(num) {
+
+      if (num === pageNum) {
+        return;
+      }
+
+      pageNum = num;
+
+      // Foydalanuvchi input'ga yozayotgan bo'lsa, uni buzmaymiz
+      if (document.activeElement !== pageInput) {
+
+        pageInput.value = String(pageNum);
+
+      }
+
+    }
+
+    function syncCurrentPage() {
+
+      if (!pdfDoc || navLock) {
+        return;
+      }
+
+      setCurrentPage(computeCurrentPage());
+
+    }
+
+    function scheduleSync() {
+
+      if (scrollTicking) {
+        return;
+      }
+
+      scrollTicking = true;
+
+      requestAnimationFrame(
+        () => {
+
+          scrollTicking = false;
+
+          syncCurrentPage();
+
+        }
+      );
+
+    }
+
+    pdfContainer.addEventListener(
+      "scroll",
+      () => {
+
+        if (!pdfDoc) {
+          return;
+        }
+
+        scheduleSync();
+
+      },
+      { passive: true }
+    );
+
+    // Foydalanuvchi o'zi scroll qilsa — navigatsiya lock'i yechiladi
+    ["wheel", "touchstart", "mousedown"].forEach(
+      (type) => {
+
+        pdfContainer.addEventListener(
+          type,
+          () => {
+
+            navLock = false;
+
+          },
+          { passive: true }
+        );
+
+      }
+    );
+
+    if (typeof ResizeObserver !== "undefined") {
+
+      new ResizeObserver(
+        () => {
+
+          if (!pageViews.length) {
+            return;
+          }
+
+          recalcLayout();
+
+          scheduleSync();
+
+        }
+      ).observe(pdfPageWrapper);
+
+      new ResizeObserver(
+        () => {
+
+          if (pageViews.length) {
+            scheduleSync();
+          }
+
+        }
+      ).observe(pdfContainer);
+
+    }
+
+    /* =======================================================
+       PAGE NAVIGATION (tugmalar / input / klaviatura)
+    ======================================================== */
+
+    function goToPage(num) {
+
+      if (!pdfDoc || !pageViews.length) {
+        return;
+      }
+
+      const numericValue =
+        Number(num);
+
+      if (!Number.isFinite(numericValue)) {
+        return;
+      }
+
+      const safeNum =
+        Math.max(
+          1,
+          Math.min(
+            pdfDoc.numPages,
+            Math.floor(numericValue)
+          )
+        );
+
+      const distance =
+        Math.abs(safeNum - pageNum);
+
+      pageNum =
+        safeNum;
+
+      pageInput.value =
+        String(pageNum);
+
+      updatePdfButtons();
+
+      navLock = true;
+
+      pdfContainer.scrollTo({
+        top: Math.max(0, pageTops[safeNum - 1] - 8),
+        left: pdfContainer.scrollLeft,
+        behavior: distance <= 1 ? "smooth" : "auto"
+      });
+
+    }
+
+    /* =======================================================
+       APPLY ZOOM (barcha sahifalar o'lchamini yangilaydi)
+    ======================================================== */
+
+    function applyZoom() {
+
+      if (!pageViews.length) {
+        return;
+      }
+
+      // Zoomdan oldin joriy sahifa va undagi nisbiy joyni eslab qolamiz
+      const idx =
+        (navLock ? pageNum : computeCurrentPage()) - 1;
+
+      const fraction =
+        pageHeights[idx]
+          ? (pdfContainer.scrollTop - pageTops[idx]) / pageHeights[idx]
+          : 0;
+
+      pageViews.forEach(
+        (view) => {
+
+          sizePageView(view);
+
+          if (view.renderTask) {
+
+            try {
+              view.renderTask.cancel();
+            } catch (_) {}
+
+          }
+
+        }
+      );
+
+      recalcLayout();
+
+      pdfContainer.scrollTop =
+        pageTops[idx] + fraction * pageHeights[idx];
+
+      pageViews.forEach(
+        (view) => {
+
+          if (view.visible) {
+            renderPageView(view);
+          }
+
+        }
+      );
+
+      scheduleSync();
+
+    }
+
+    /* =======================================================
+   PDF VERTICAL SCROLL BUTTONS
+======================================================= */
+
+const PDF_SCROLL_STEP = 300;
+
+
+prevPageBtn.addEventListener(
+  "click",
+  () => {
+
+    if (!pdfDoc) {
+      return;
+    }
+
+    goToPage(
+      pageNum - 1
+    );
+
+  }
+);
+
+
+nextPageBtn.addEventListener(
+  "click",
+  () => {
+
+    if (!pdfDoc) {
+      return;
+    }
+
+    goToPage(
+      pageNum + 1
+    );
+
+  }
+);
+
+
+    pageInput.addEventListener(
+      "change",
+      () => {
+
+        const value =
+          parseInt(
+            pageInput.value,
+            10
+          );
+
+
+        if (
+          pdfDoc &&
+          Number.isInteger(value) &&
+          value >= 1 &&
+          value <= pdfDoc.numPages
+        ) {
+
+          goToPage(value);
+
+        } else {
+
+          pageInput.value =
+            String(pageNum);
+
+        }
+
+      }
+    );
+
+
+    pageInput.addEventListener(
+      "keydown",
+      (e) => {
+
+        if (e.key === "Enter") {
+
+          e.preventDefault();
+
+          pageInput.blur();
+
+        }
+
+      }
+    );
+
+
+    pageInput.addEventListener(
+      "blur",
+      () => {
+
+        if (!pdfDoc) {
+
+          pageInput.value = "1";
+
+          return;
+
+        }
+
+
+        const value =
+          parseInt(
+            pageInput.value,
+            10
+          );
+
+
+        if (
+          !Number.isInteger(value) ||
+          value < 1 ||
+          value > pdfDoc.numPages
+        ) {
+
+          pageInput.value =
+            String(pageNum);
+
+        }
+
+      }
+    );
+
+
+    /* =======================================================
+       ZOOM
+    ======================================================== */
+
+    function changeZoom(delta) {
+
+      if (!pdfDoc) {
+        return;
+      }
+
+
+      const numericDelta =
+        Number(delta);
+
+
+      if (!Number.isFinite(numericDelta)) {
+        return;
+      }
+
+
+      const newScale =
+        Math.max(
+          MIN_ZOOM,
+          Math.min(
+            MAX_ZOOM,
+            Number(
+              (
+                scale +
+                numericDelta
+              ).toFixed(2)
+            )
+          )
+        );
+
+
+      if (
+        !Number.isFinite(newScale) ||
+        newScale === scale
+      ) {
+
+        return;
+
+      }
+
+
+      scale =
+        newScale;
+
+      applyZoom();
+
+    }
+
+
+    /* =======================================================
+       CTRL + MOUSE WHEEL ZOOM
+    ======================================================== */
+
+    pdfContainer.addEventListener(
+      "wheel",
+      (e) => {
+
+        if (!e.ctrlKey) {
+          return;
+        }
+
+
+        if (!pdfDoc) {
+          return;
+        }
+
+
+        e.preventDefault();
+
+
+        const delta =
+          e.deltaY < 0
+            ? ZOOM_STEP
+            : -ZOOM_STEP;
+
+
+        changeZoom(
+          delta
+        );
+
+      },
+      {
+        passive: false
+      }
+    );
+
+
+    /* =======================================================
+       PDF DRAG / PAN
+    ======================================================== */
+
+    let isDragging = false;
+
+    let dragStartX = 0;
+
+    let dragStartY = 0;
+
+    let scrollStartLeft = 0;
+
+    let scrollStartTop = 0;
+
+
+    function stopPdfDragging() {
+
+      isDragging = false;
+
+      pdfContainer.classList.remove(
+        "dragging"
+      );
+
+    }
+
+
+    pdfContainer.addEventListener(
+      "mousedown",
+      (e) => {
+
+        if (e.button !== 0) {
+          return;
+        }
+
+
+        const target =
+          e.target;
+
+
+        if (
+          target instanceof Element &&
+          (
+            target.closest("button") ||
+            target.closest("input") ||
+            target.closest("a")
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        // Scrollbarni bosganda sudrash (pan) ishga tushmasin
+        const containerRect =
+          pdfContainer.getBoundingClientRect();
+
+        if (
+          e.clientX > containerRect.left + pdfContainer.clientWidth ||
+          e.clientY > containerRect.top + pdfContainer.clientHeight
+        ) {
+          return;
+        }
+
+        // preventDefault() fokusni olib tashlamaydi — o'zimiz olib tashlaymiz
+        // (aks holda sahifa raqami inputida fokus qolib, shortcutlar ishlamaydi)
+        if (
+          document.activeElement instanceof HTMLElement &&
+          document.activeElement !== document.body
+        ) {
+          document.activeElement.blur();
+        }
+
+        isDragging = true;
+
+
+        pdfContainer.classList.add(
+          "dragging"
+        );
+
+
+        dragStartX =
+          e.clientX;
+
+        dragStartY =
+          e.clientY;
+
+
+        scrollStartLeft =
+          pdfContainer.scrollLeft;
+
+        scrollStartTop =
+          pdfContainer.scrollTop;
+
+
+        e.preventDefault();
+
+      }
+    );
+
+
+    document.addEventListener(
+      "mousemove",
+      (e) => {
+
+        if (!isDragging) {
+          return;
+        }
+
+
+        const dx =
+          e.clientX -
+          dragStartX;
+
+
+        const dy =
+          e.clientY -
+          dragStartY;
+
+
+        pdfContainer.scrollLeft =
+          scrollStartLeft - dx;
+
+
+        pdfContainer.scrollTop =
+          scrollStartTop - dy;
+
+      }
+    );
+
+
+    document.addEventListener(
+      "mouseup",
+      stopPdfDragging
+    );
+
+
+    window.addEventListener(
+      "blur",
+      stopPdfDragging
+    );
+
+
+    /* =======================================================
+       AUDIO ELEMENTS
+    ======================================================== */
+
+    const audio =
+      document.getElementById("audio");
+
+    const audioInput =
+      document.getElementById("audioInput");
+
+    const openAudioBtn =
+      document.getElementById("openAudioBtn");
+
+    const playBtn =
+      document.getElementById("playBtn");
+
+    const prevAudioBtn =
+      document.getElementById("prevAudioBtn");
+
+    const nextAudioBtn =
+      document.getElementById("nextAudioBtn");
+
+    const progress =
+      document.getElementById("progress");
+
+    const currentTime =
+      document.getElementById("currentTime");
+
+    const duration =
+      document.getElementById("duration");
+
+    const speedBtn =
+      document.getElementById("speedBtn");
+
+    const volume =
+      document.getElementById("volume");
+
+    const muteBtn =
+      document.getElementById("muteBtn");
+
+    const loopBtn =
+      document.getElementById("loopBtn");
+
+    const btnA =
+      document.getElementById("btnA");
+
+    const btnB =
+      document.getElementById("btnB");
+
+    const clearLoopBtn =
+      document.getElementById("clearLoopBtn");
+
+    const audioStatus =
+      document.getElementById("audioStatus");
+
+
+    /* =======================================================
+       AUDIO STATE
+    ======================================================== */
+
+    let audioFileURL = null;
+
+    let pointA = null;
+
+    let pointB = null;
+
+    let loopEnabled = false;
+
+    let previousVolume = 1;
+
+    let speedIndex = 2;
+
+
+    const speeds = [
+      0.5,
+      0.75,
+      1,
+      1.25,
+      1.5,
+      2
+    ];
+
+
+    /* =======================================================
+       AUDIO HELPERS
+    ======================================================== */
+
+    function isAudioFile(file) {
+
+      if (!file) {
+        return false;
+      }
+
+
+      const type =
+        String(file.type || "").toLowerCase();
+
+
+      const name =
+        String(file.name || "").toLowerCase();
+
+
+      const audioExtensions = [
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".aac",
+        ".ogg",
+        ".oga",
+        ".flac",
+        ".webm",
+        ".opus",
+        ".weba"
+      ];
+
+
+      return (
+        type.startsWith("audio/") ||
+        audioExtensions.some(
+          (extension) =>
+            name.endsWith(extension)
+        )
+      );
+
+    }
+
+
+    function hasAudioSource() {
+
+      return (
+        typeof audio.src === "string" &&
+        audio.src.trim() !== ""
+      );
+
+    }
+
+
+    function getFiniteDuration() {
+
+      const value =
+        Number(audio.duration);
+
+
+      if (
+        Number.isFinite(value) &&
+        value >= 0
+      ) {
+
+        return value;
+
+      }
+
+
+      return 0;
+
+    }
+
+
+    function clampTime(value) {
+
+      const durationValue =
+        getFiniteDuration();
+
+
+      const numericValue =
+        Number(value);
+
+
+      if (
+        !Number.isFinite(numericValue)
+      ) {
+
+        return 0;
+
+      }
+
+
+      if (durationValue <= 0) {
+
+        return Math.max(
+          0,
+          numericValue
+        );
+
+      }
+
+
+      return Math.max(
+        0,
+        Math.min(
+          durationValue,
+          numericValue
+        )
+      );
+
+    }
+
+
+    /* =======================================================
+       PLAYLIST — BIR NECHTA AUDIO
+    ======================================================== */
+
+    const playlistBtn =
+      document.getElementById("playlistBtn");
+
+    const playlistBadge =
+      document.getElementById("playlistBadge");
+
+    const playlistPanel =
+      document.getElementById("playlistPanel");
+
+    const playlistList =
+      document.getElementById("playlistList");
+
+    const playlistTitle =
+      document.getElementById("playlistTitle");
+
+    const playlistAddBtn =
+      document.getElementById("playlistAddBtn");
+
+    const playlistAutoBtn =
+      document.getElementById("playlistAutoBtn");
+
+    const playlistClearBtn =
+      document.getElementById("playlistClearBtn");
+
+    const playlistCloseBtn =
+      document.getElementById("playlistCloseBtn");
+
+    // Har bir element: { file, name, key }
+    let playlist = [];
+
+    let playlistIndex = -1;
+
+    // Audio tugagach keyingisiga avtomatik o'tish
+    let autoNext = true;
+
+    // true bo'lsa — tanlangan fayllar mavjud ro'yxatga qo'shiladi
+    let appendMode = false;
+
+    function revokeCurrentAudioURL() {
+
+      if (audioFileURL) {
+
+        URL.revokeObjectURL(
+          audioFileURL
+        );
+
+        audioFileURL = null;
+
+      }
+
+    }
+
+    function naturalCompare(a, b) {
+
+      // "Unit 2" "Unit 10" dan oldin keladi
+      return a.name.localeCompare(
+        b.name,
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base"
+        }
+      );
+
+    }
+
+    function setPlaylistOpen(open) {
+
+      playlistPanel.classList.toggle(
+        "hidden",
+        !open
+      );
+
+      playlistBtn.classList.toggle(
+        "active",
+        open
+      );
+
+      if (open) {
+        renderPlaylist();
+      }
+
+    }
+
+    function renderPlaylist() {
+
+      playlistList.replaceChildren();
+
+      if (!playlist.length) {
+
+        const empty =
+          document.createElement("li");
+
+        empty.className = "playlist-empty";
+
+        empty.textContent =
+          "Ro'yxat bo'sh. «Qo'shish» orqali audio tanlang.";
+
+        playlistList.appendChild(empty);
+
+      }
+
+      playlist.forEach(
+        (track, i) => {
+
+          const li =
+            document.createElement("li");
+
+          li.className =
+            "playlist-item" +
+            (i === playlistIndex ? " current" : "");
+
+          li.dataset.index = String(i);
+
+          li.title = track.name;
+
+          const num =
+            document.createElement("span");
+
+          num.className = "playlist-num";
+
+          if (i === playlistIndex) {
+
+            num.innerHTML =
+              '<i class="fa-solid fa-volume-high"></i>';
+
+          } else {
+
+            num.textContent = String(i + 1);
+
+          }
+
+          const name =
+            document.createElement("span");
+
+          name.className = "playlist-name";
+
+          name.textContent = track.name;
+
+          const remove =
+            document.createElement("button");
+
+          remove.type = "button";
+
+          remove.className = "playlist-remove";
+
+          remove.title = "Ro'yxatdan olib tashlash";
+
+          remove.dataset.remove = String(i);
+
+          remove.innerHTML =
+            '<i class="fa-solid fa-xmark"></i>';
+
+          li.append(num, name, remove);
+
+          playlistList.appendChild(li);
+
+        }
+      );
+
+      playlistTitle.textContent =
+        playlist.length
+          ? `Playlist · ${playlist.length} ta audio`
+          : "Playlist";
+
+      playlistBadge.textContent =
+        String(playlist.length);
+
+      playlistBadge.style.display =
+        playlist.length > 1
+          ? "block"
+          : "none";
+
+      playlistClearBtn.disabled =
+        !playlist.length;
+
+      if (!playlistPanel.classList.contains("hidden")) {
+
+        const current =
+          playlistList.querySelector(".current");
+
+        if (current) {
+
+          current.scrollIntoView({
+            block: "nearest"
+          });
+
+        }
+
+      }
+
+    }
+
+    function loadTrack(index, options = {}) {
+
+      if (
+        index < 0 ||
+        index >= playlist.length
+      ) {
+        return;
+      }
+
+      const autoplay =
+        Boolean(options.autoplay);
+
+      const track =
+        playlist[index];
+
+      audio.pause();
+
+      revokeCurrentAudioURL();
+
+      clearABLoop(
+        false
+      );
+
+      playlistIndex = index;
+
+      audioFileURL =
+        URL.createObjectURL(track.file);
+
+      audio.src =
+        audioFileURL;
+
+      audio.loop = false;
+
+      audio.load();
+
+      // load() tezlikni 1x ga qaytaradi — tanlangan tezlikni tiklaymiz
+      updateSpeed();
+
+      progress.value = "0";
+
+      progress.max = "0";
+
+      currentTime.textContent =
+        "0:00";
+
+      duration.textContent =
+        "0:00";
+
+      updateLoopButton();
+
+      updatePlayIcon();
+
+      renderPlaylist();
+
+      showStatus(
+        playlist.length > 1
+          ? `${index + 1}/${playlist.length} · ${track.name}`
+          : track.name,
+        2500
+      );
+
+      if (autoplay) {
+
+        const playPromise =
+          audio.play();
+
+        if (
+          playPromise &&
+          typeof playPromise.catch === "function"
+        ) {
+
+          playPromise.catch(
+            (error) => {
+
+              console.error(
+                "Audio play error:",
+                error
+              );
+
+              updatePlayIcon();
+
+            }
+          );
+
+        }
+
+      }
+
+    }
+
+    function addAudioFiles(fileList, append) {
+
+      const all =
+        Array.from(fileList || []);
+
+      const valid =
+        all.filter(isAudioFile);
+
+      if (!valid.length) {
+
+        alert(
+          "Iltimos, audio fayl tanlang."
+        );
+
+        return;
+
+      }
+
+      const incoming =
+        valid.map(
+          (file) => ({
+            file: file,
+            name: file.name,
+            key: [
+              file.name,
+              file.size,
+              file.lastModified
+            ].join("|")
+          })
+        ).sort(naturalCompare);
+
+      if (append && playlist.length) {
+
+        const known =
+          new Set(
+            playlist.map(
+              (track) => track.key
+            )
+          );
+
+        const fresh =
+          incoming.filter(
+            (track) => !known.has(track.key)
+          );
+
+        if (!fresh.length) {
+
+          showStatus(
+            "Bu audiolar ro'yxatda bor",
+            2000
+          );
+
+          return;
+
+        }
+
+        playlist =
+          playlist.concat(fresh);
+
+        renderPlaylist();
+
+        showStatus(
+          `${fresh.length} ta audio qo'shildi`,
+          2000
+        );
+
+        return;
+
+      }
+
+      playlist =
+        incoming;
+
+      loadTrack(
+        0,
+        { autoplay: false }
+      );
+
+      // Bir nechta audio tanlansa — ro'yxatni ko'rsatamiz
+      if (playlist.length > 1) {
+
+        setPlaylistOpen(true);
+
+      }
+
+    }
+
+    function removeTrack(index) {
+
+      if (
+        index < 0 ||
+        index >= playlist.length
+      ) {
+        return;
+      }
+
+      if (index === playlistIndex) {
+
+        const wasPlaying =
+          !audio.paused;
+
+        playlist.splice(index, 1);
+
+        if (!playlist.length) {
+
+          clearPlaylist(false);
+
+          return;
+
+        }
+
+        loadTrack(
+          Math.min(index, playlist.length - 1),
+          { autoplay: wasPlaying }
+        );
+
+      } else {
+
+        playlist.splice(index, 1);
+
+        if (index < playlistIndex) {
+          playlistIndex--;
+        }
+
+        renderPlaylist();
+
+      }
+
+    }
+
+    function clearPlaylist(showMessage = true) {
+
+      audio.pause();
+
+      playlist = [];
+
+      playlistIndex = -1;
+
+      revokeCurrentAudioURL();
+
+      audio.removeAttribute("src");
+
+      audio.load();
+
+      clearABLoop(
+        false
+      );
+
+      progress.value = "0";
+
+      progress.max = "0";
+
+      currentTime.textContent =
+        "0:00";
+
+      duration.textContent =
+        "0:00";
+
+      updateLoopButton();
+
+      updatePlayIcon();
+
+      renderPlaylist();
+
+      if (showMessage) {
+
+        showStatus(
+          "Playlist tozalandi"
+        );
+
+      }
+
+    }
+
+    /* =======================================================
+       OPEN AUDIO
+    ======================================================== */
+
+    openAudioBtn.addEventListener(
+      "click",
+      () => {
+
+        appendMode = false;
+
+        audioInput.click();
+
+      }
+    );
+
+    audioInput.addEventListener(
+      "change",
+      (e) => {
+
+        const files =
+          e.target.files;
+
+        const append =
+          appendMode;
+
+        appendMode = false;
+
+        if (
+          !files ||
+          !files.length
+        ) {
+          return;
+        }
+
+        addAudioFiles(
+          files,
+          append
+        );
+
+        audioInput.value = "";
+
+      }
+    );
+
+    /* =======================================================
+       PLAYLIST UI EVENTS
+    ======================================================== */
+
+    playlistBtn.addEventListener(
+      "click",
+      () => {
+
+        setPlaylistOpen(
+          playlistPanel.classList.contains("hidden")
+        );
+
+      }
+    );
+
+    playlistCloseBtn.addEventListener(
+      "click",
+      () => setPlaylistOpen(false)
+    );
+
+    playlistAddBtn.addEventListener(
+      "click",
+      () => {
+
+        appendMode = true;
+
+        audioInput.click();
+
+      }
+    );
+
+    playlistAutoBtn.addEventListener(
+      "click",
+      () => {
+
+        autoNext = !autoNext;
+
+        playlistAutoBtn.classList.toggle(
+          "on",
+          autoNext
+        );
+
+        showStatus(
+          autoNext
+            ? "Avto-o'tish yoqildi"
+            : "Avto-o'tish o'chirildi"
+        );
+
+      }
+    );
+
+    playlistClearBtn.addEventListener(
+      "click",
+      () => clearPlaylist(true)
+    );
+
+    playlistList.addEventListener(
+      "click",
+      (e) => {
+
+        const target =
+          e.target instanceof Element
+            ? e.target
+            : null;
+
+        if (!target) {
+          return;
+        }
+
+        const removeBtn =
+          target.closest(".playlist-remove");
+
+        if (removeBtn) {
+
+          removeTrack(
+            Number(removeBtn.dataset.remove)
+          );
+
+          return;
+
+        }
+
+        const item =
+          target.closest(".playlist-item");
+
+        if (!item) {
+          return;
+        }
+
+        const index =
+          Number(item.dataset.index);
+
+        if (index === playlistIndex) {
+
+          togglePlay();
+
+        } else {
+
+          loadTrack(
+            index,
+            { autoplay: true }
+          );
+
+        }
+
+      }
+    );
+
+    // Panel tashqarisiga bosilsa — yopiladi
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+
+        if (
+          playlistPanel.classList.contains("hidden")
+        ) {
+          return;
+        }
+
+        const target =
+          e.target instanceof Element
+            ? e.target
+            : null;
+
+        if (
+          target &&
+          (
+            target.closest("#playlistPanel") ||
+            target.closest("#audioPlayerBar")
+          )
+        ) {
+          return;
+        }
+
+        setPlaylistOpen(false);
+
+      }
+    );
+
+    // Audio tugagach — keyingisiga avtomatik o'tish
+    audio.addEventListener(
+      "ended",
+      () => {
+
+        if (
+          !autoNext ||
+          playlistIndex < 0 ||
+          playlistIndex >= playlist.length - 1
+        ) {
+          return;
+        }
+
+        // A-B loop faol bo'lsa, undan chiqib ketmaymiz
+        if (
+          loopEnabled &&
+          pointA !== null &&
+          pointB !== null
+        ) {
+          return;
+        }
+
+        loadTrack(
+          playlistIndex + 1,
+          { autoplay: true }
+        );
+
+      }
+    );
+
+    renderPlaylist();
+
+    /* =======================================================
+       PLAY / PAUSE
+    ======================================================== */
+
+    function updatePlayIcon() {
+
+      if (audio.paused) {
+
+        playBtn.innerHTML =
+          '<i class="fa-solid fa-play"></i>';
+
+      } else {
+
+        playBtn.innerHTML =
+          '<i class="fa-solid fa-pause"></i>';
+
+      }
+
+    }
+
+
+    async function togglePlay() {
+
+      if (!hasAudioSource()) {
+
+        showStatus(
+          "Avval audio oching"
+        );
+
+        return;
+
+      }
+
+
+      if (audio.paused) {
+
+        try {
+
+          await audio.play();
+
+        } catch (error) {
+
+          console.error(
+            "Audio play error:",
+            error
+          );
+
+          showStatus(
+            "Audio ijro etilmadi"
+          );
+
+        }
+
+      } else {
+
+        audio.pause();
+
+      }
+
+
+      updatePlayIcon();
+
+    }
+
+
+    playBtn.addEventListener(
+      "click",
+      togglePlay
+    );
+
+
+    /* =======================================================
+       PREVIOUS / NEXT
+    ======================================================== */
+
+function previousAudio() {
+
+      if (!hasAudioSource()) {
+
+        showStatus(
+          "Avval audio oching"
+        );
+
+        return;
+
+      }
+
+      // Audio boshlanganiga 3 soniyadan kam bo'lsa — oldingi audioga o'tamiz
+      if (
+        playlistIndex > 0 &&
+        audio.currentTime <= 3
+      ) {
+
+        loadTrack(
+          playlistIndex - 1,
+          { autoplay: !audio.paused }
+        );
+
+        return;
+
+      }
+
+      audio.pause();
+
+      audio.currentTime = 0;
+
+      clearABLoop(
+        false
+      );
+
+      updateLoopButton();
+
+      updatePlayIcon();
+
+      showStatus(
+        "Boshiga"
+      );
+
+    }
+
+    function nextAudio() {
+
+      if (!hasAudioSource()) {
+
+        showStatus(
+          "Avval audio oching"
+        );
+
+        return;
+
+      }
+
+      if (
+        playlistIndex >= 0 &&
+        playlistIndex < playlist.length - 1
+      ) {
+
+        loadTrack(
+          playlistIndex + 1,
+          { autoplay: !audio.paused }
+        );
+
+        return;
+
+      }
+
+      if (playlist.length > 1) {
+
+        showStatus(
+          "Bu oxirgi audio"
+        );
+
+        return;
+
+      }
+
+      audio.pause();
+
+      audio.currentTime = 0;
+
+      clearABLoop(
+        false
+      );
+
+      updateLoopButton();
+
+      updatePlayIcon();
+
+      showStatus(
+        "Keyingi audio uchun yangi fayl oching"
+      );
+
+    }
+
+    prevAudioBtn.addEventListener(
+      "click",
+      previousAudio
+    );
+
+
+    nextAudioBtn.addEventListener(
+      "click",
+      nextAudio
+    );
+
+
+    /* =======================================================
+       AUDIO METADATA
+    ======================================================== */
+
+    audio.addEventListener(
+      "loadedmetadata",
+      () => {
+
+        const total =
+          getFiniteDuration();
+
+
+        progress.max =
+          String(total);
+
+
+        progress.value =
+          "0";
+
+
+        duration.textContent =
+          formatTime(total);
+
+
+        currentTime.textContent =
+          "0:00";
+
+      }
+    );
+
+
+    /* =======================================================
+       TIME UPDATE
+    ======================================================== */
+
+    audio.addEventListener(
+      "timeupdate",
+      () => {
+
+        const total =
+          getFiniteDuration();
+
+
+        const current =
+          Number(audio.currentTime);
+
+
+        if (total > 0) {
+
+          progress.max =
+            String(total);
+
+
+          progress.value =
+            String(
+              Math.min(
+                total,
+                Math.max(
+                  0,
+                  Number.isFinite(current)
+                    ? current
+                    : 0
+                )
+              )
+            );
+
+        }
+
+
+        currentTime.textContent =
+          formatTime(
+            current
+          );
+
+
+        duration.textContent =
+          formatTime(
+            total
+          );
+
+
+        checkABLoop();
+
+      }
+    );
+
+
+    /* =======================================================
+       PROGRESS SEEK
+    ======================================================== */
+
+    progress.addEventListener(
+      "input",
+      () => {
+
+        if (!hasAudioSource()) {
+          return;
+        }
+
+
+        const value =
+          Number(progress.value);
+
+
+        if (!Number.isFinite(value)) {
+          return;
+        }
+
+
+        const safeValue =
+          clampTime(value);
+
+
+        try {
+
+          audio.currentTime =
+            safeValue;
+
+        } catch (error) {
+
+          console.error(
+            "Audio seek error:",
+            error
+          );
+
+        }
+
+      }
+    );
+
+
+    /* =======================================================
+       AUDIO EVENTS
+    ======================================================== */
+
+    audio.addEventListener(
+      "canplay",
+      () => {
+
+        updatePlayIcon();
+
+      }
+    );
+
+
+    audio.addEventListener(
+      "play",
+      () => {
+
+        updatePlayIcon();
+
+      }
+    );
+
+
+    audio.addEventListener(
+      "pause",
+      () => {
+
+        updatePlayIcon();
+
+      }
+    );
+
+
+    audio.addEventListener(
+      "ended",
+      () => {
+
+        updatePlayIcon();
+
+      }
+    );
+
+
+    audio.addEventListener(
+      "error",
+      () => {
+
+        console.error(
+          "Audio element error:",
+          audio.error
+        );
+
+
+        updatePlayIcon();
+
+
+        showStatus(
+          "Audio faylni o'qib bo'lmadi"
+        );
+
+      }
+    );
+
+
+    /* =======================================================
+       A-B LOOP
+    ======================================================== */
+
+    function setPointA() {
+
+      if (!hasAudioSource()) {
+
+        showStatus(
+          "Avval audio oching"
+        );
+
+        return;
+
+      }
+
+
+      const current =
+        Number(audio.currentTime);
+
+
+      const safeCurrent =
+        Number.isFinite(current)
+          ? Math.max(
+              0,
+              current
+            )
+          : 0;
+
+
+      /*
+        Avvalgi behavior saqlanadi:
+        A nuqta currentTime'dan 0.2 sekund oldin olinadi.
+      */
+
+      pointA =
+        Math.max(
+          0,
+          safeCurrent - 0.2
+        );
+
+
+      pointB = null;
+
+      loopEnabled = false;
+
+      audio.loop = false;
+
+
+      btnA.classList.add(
+        "active"
+      );
+
+      btnB.classList.remove(
+        "active"
+      );
+
+
+      updateLoopButton();
+
+
+      showStatus(
+        "A: " +
+        formatTime(pointA)
+      );
+
+    }
+
+
+    function setPointB() {
+
+      if (!hasAudioSource()) {
+
+        showStatus(
+          "Avval audio oching"
+        );
+
+        return;
+
+      }
+
+
+      if (pointA === null) {
+
+        showStatus(
+          "Avval A ni bosing"
+        );
+
+        return;
+
+      }
+
+
+      const calculatedB =
+        Number(audio.currentTime);
+
+
+      if (!Number.isFinite(calculatedB)) {
+
+        showStatus(
+          "B nuqtani aniqlab bo'lmadi"
+        );
+
+        return;
+
+      }
+
+
+      if (calculatedB <= pointA) {
+
+        showStatus(
+          "B A dan keyin bo'lishi kerak"
+        );
+
+        return;
+
+      }
+
+
+      pointB =
+        calculatedB;
+
+
+      loopEnabled = true;
+
+      audio.loop = false;
+
+
+      btnB.classList.add(
+        "active"
+      );
+
+
+      loopBtn.classList.add(
+        "active"
+      );
+
+
+      try {
+
+        audio.currentTime =
+          pointA;
+
+      } catch (error) {
+
+        console.error(
+          "A-B seek error:",
+          error
+        );
+
+      }
+
+
+      if (audio.paused) {
+
+        audio.play()
+          .then(() => {
+
+            updatePlayIcon();
+
+          })
+          .catch(
+            (error) => {
+
+              console.error(
+                "A-B autoplay error:",
+                error
+              );
+
+              updatePlayIcon();
+
+              showStatus(
+                "A-B tayyor. Play tugmasini bosing."
+              );
+
+            }
+          );
+
+      } else {
+
+        updatePlayIcon();
+
+      }
+
+
+      showStatus(
+        "A-B faol"
+      );
+
+    }
+
+
+    function checkABLoop() {
+
+      if (
+        !loopEnabled ||
+        pointA === null ||
+        pointB === null ||
+        !hasAudioSource()
+      ) {
+
+        return;
+
+      }
+
+
+      const current =
+        Number(audio.currentTime);
+
+
+      if (!Number.isFinite(current)) {
+        return;
+      }
+
+
+      if (
+        current >= pointB
+      ) {
+
+        try {
+
+          audio.currentTime =
+            pointA;
+
+        } catch (error) {
+
+          console.error(
+            "A-B loop seek error:",
+            error
+          );
+
+        }
+
+      }
+
+    }
+
+
+    function clearABLoop(
+      showMessage = true
+    ) {
+
+      pointA = null;
+
+      pointB = null;
+
+      loopEnabled = false;
+
+
+      btnA.classList.remove(
+        "active"
+      );
+
+
+      btnB.classList.remove(
+        "active"
+      );
+
+
+      updateLoopButton();
+
+
+      if (showMessage) {
+
+        showStatus(
+          "A-B loop o'chirildi"
+        );
+
+      }
+
+    }
+
+
+    btnA.addEventListener(
+      "click",
+      setPointA
+    );
+
+
+    btnB.addEventListener(
+      "click",
+      setPointB
+    );
+
+
+    clearLoopBtn.addEventListener(
+      "click",
+      () => {
+
+        clearABLoop(
+          true
+        );
+
+      }
+    );
+
+
+    /* =======================================================
+       A-B LOOP — ANIQ TEKSHIRUV
+       (timeupdate ~250 ms da bir marta keladi, shu sababli B nuqtadan
+        sezilarli o'tib ketardi; ijro paytida har kadrda tekshiramiz)
+    ======================================================== */
+
+    let abFrameId = 0;
+
+    function abFrameLoop() {
+
+      abFrameId = 0;
+
+      if (
+        audio.paused ||
+        audio.ended
+      ) {
+        return;
+      }
+
+      checkABLoop();
+
+      abFrameId =
+        requestAnimationFrame(
+          abFrameLoop
+        );
+
+    }
+
+    function startABFrameLoop() {
+
+      if (
+        !abFrameId &&
+        !audio.paused
+      ) {
+
+        abFrameId =
+          requestAnimationFrame(
+            abFrameLoop
+          );
+
+      }
+
+    }
+
+    audio.addEventListener(
+      "play",
+      startABFrameLoop
+    );
+
+    audio.addEventListener(
+      "playing",
+      startABFrameLoop
+    );
+
+    /* =======================================================
+       NORMAL LOOP
+    ======================================================== */
+
+    function updateLoopButton() {
+
+      loopBtn.classList.toggle(
+        "active",
+        Boolean(
+          loopEnabled ||
+          audio.loop
+        )
+      );
+
+    }
+
+
+    loopBtn.addEventListener(
+      "click",
+      () => {
+
+        if (!hasAudioSource()) {
+
+          showStatus(
+            "Avval audio oching"
+          );
+
+          return;
+
+        }
+
+
+        if (
+          pointA !== null &&
+          pointB !== null
+        ) {
+
+          loopEnabled =
+            !loopEnabled;
+
+
+          audio.loop = false;
+
+        } else {
+
+          audio.loop =
+            !audio.loop;
+
+
+          loopEnabled = false;
+
+        }
+
+
+        updateLoopButton();
+
+      }
+    );
+
+
+    /* =======================================================
+       SPEED
+    ======================================================== */
+
+    function updateSpeed() {
+
+      const speed =
+        speeds[speedIndex];
+
+
+      if (
+        !Number.isFinite(speed) ||
+        speed <= 0
+      ) {
+
+        speedIndex =
+          speeds.indexOf(1);
+
+      }
+
+
+      const safeSpeed =
+        speeds[speedIndex];
+
+
+      audio.playbackRate =
+        safeSpeed;
+
+
+      speedBtn.textContent =
+        safeSpeed + "x";
+
+    }
+
+
+    speedBtn.addEventListener(
+      "click",
+      () => {
+
+        speedIndex =
+          (
+            speedIndex + 1
+          ) %
+          speeds.length;
+
+
+        updateSpeed();
+
+      }
+    );
+
+
+    updateSpeed();
+
+
+    /* =======================================================
+       VOLUME
+    ======================================================== */
+
+    function updateMuteIcon(vol) {
+
+      const safeVolume =
+        Number.isFinite(
+          Number(vol)
+        )
+          ? Number(vol)
+          : 0;
+
+
+      if (safeVolume <= 0) {
+
+        muteBtn.innerHTML =
+          '<i class="fa-solid fa-volume-xmark"></i>';
+
+      } else if (safeVolume < 0.5) {
+
+        muteBtn.innerHTML =
+          '<i class="fa-solid fa-volume-low"></i>';
+
+      } else {
+
+        muteBtn.innerHTML =
+          '<i class="fa-solid fa-volume-high"></i>';
+
+      }
+
+    }
+
+
+    volume.addEventListener(
+      "input",
+      () => {
+
+        let value =
+          Number(volume.value);
+
+
+        if (!Number.isFinite(value)) {
+          value = 1;
+        }
+
+
+        value =
+          Math.max(
+            0,
+            Math.min(
+              1,
+              value
+            )
+          );
+
+
+        audio.volume =
+          value;
+
+
+        volume.value =
+          String(value);
+
+
+        if (value > 0) {
+
+          previousVolume =
+            value;
+
+        }
+
+
+        updateMuteIcon(
+          value
+        );
+
+      }
+    );
+
+
+    muteBtn.addEventListener(
+      "click",
+      () => {
+
+        if (audio.volume > 0) {
+
+          previousVolume =
+            audio.volume;
+
+
+          audio.volume = 0;
+
+          volume.value = "0";
+
+        } else {
+
+          const restoredVolume =
+            Number.isFinite(
+              Number(previousVolume)
+            )
+              ? Math.max(
+                  0.01,
+                  Math.min(
+                    1,
+                    Number(previousVolume)
+                  )
+                )
+              : 1;
+
+
+          audio.volume =
+            restoredVolume;
+
+
+          volume.value =
+            String(restoredVolume);
+
+        }
+
+
+        updateMuteIcon(
+          audio.volume
+        );
+
+      }
+    );
+
+
+    /* =======================================================
+       STATUS
+    ======================================================== */
+
+    let statusTimer = null;
+
+
+    function showStatus(
+      text,
+      durationMs = 1500
+    ) {
+
+      clearTimeout(
+        statusTimer
+      );
+
+
+      audioStatus.textContent =
+        String(text || "");
+
+
+      if (
+        Number.isFinite(durationMs) &&
+        durationMs > 0
+      ) {
+
+        statusTimer =
+          setTimeout(
+            () => {
+
+              audioStatus.textContent =
+                "";
+
+            },
+            durationMs
+          );
+
+      }
+
+    }
+
+
+    /* =======================================================
+       TIME FORMAT
+    ======================================================== */
+
+    function formatTime(seconds) {
+
+      const value =
+        Number(seconds);
+
+
+      if (
+        !Number.isFinite(value) ||
+        value < 0
+      ) {
+
+        return "0:00";
+
+      }
+
+
+      const minutes =
+        Math.floor(
+          value / 60
+        );
+
+
+      const secs =
+        Math.floor(
+          value % 60
+        );
+
+
+      return (
+        minutes +
+        ":" +
+        String(secs).padStart(
+          2,
+          "0"
+        )
+      );
+
+    }
+
+
+    /* =======================================================
+       KEYBOARD SHORTCUTS
+    ======================================================== */
+
+    document.addEventListener(
+      "keydown",
+      (e) => {
+
+        const target =
+          e.target;
+
+
+        const tag =
+          target &&
+          typeof target.tagName === "string"
+            ? target.tagName.toUpperCase()
+            : "";
+
+
+        /*
+          Input ichida yozayotgan paytda
+          shortcutlar ishlamasin.
+        */
+
+        if (
+          tag === "INPUT" ||
+          tag === "SELECT" ||
+          tag === "TEXTAREA" ||
+          (
+            target &&
+            target.isContentEditable
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        /* ===================================================
+           CTRL / CMD + O — PDF
+        =================================================== */
+
+        if (
+          (e.ctrlKey || e.metaKey) &&
+          e.key.toLowerCase() === "o"
+        ) {
+
+          e.preventDefault();
+
+          openPdfBtn.click();
+
+          return;
+
+        }
+
+
+        /* ===================================================
+           SPACE — PLAY / PAUSE
+        =================================================== */
+
+        if (
+          e.code === "Space"
+        ) {
+
+          e.preventDefault();
+
+          togglePlay();
+
+          return;
+
+        }
+
+
+        /* ===================================================
+           AUDIO + PDF SHORTCUTS
+        =================================================== */
+
+        /*
+          Ctrl / Cmd / Alt bilan bosilgan tugmalar brauzerga qoldiriladi
+          (masalan Ctrl+0 — zoomni tiklash, Alt+← — orqaga).
+        */
+
+        if (
+          e.ctrlKey ||
+          e.metaKey ||
+          e.altKey
+        ) {
+          return;
+        }
+
+        switch (e.key) {
+
+          /* A */
+
+          case "1":
+
+            e.preventDefault();
+
+            setPointA();
+
+            break;
+
+
+          /* B */
+
+          case "3":
+
+            e.preventDefault();
+
+            setPointB();
+
+            break;
+
+
+          /* CLEAR A-B */
+
+          case "7":
+
+            e.preventDefault();
+
+            clearABLoop(true);
+
+            break;
+
+
+          /* PLAY */
+
+          case "5":
+
+            e.preventDefault();
+
+            togglePlay();
+
+            break;
+
+
+          /* -2 seconds */
+
+          case "4":
+
+            e.preventDefault();
+
+
+            if (hasAudioSource()) {
+
+              const current =
+                Number(audio.currentTime);
+
+
+              const nextTime =
+                Number.isFinite(current)
+                  ? Math.max(
+                      0,
+                      current - 2
+                    )
+                  : 0;
+
+
+              try {
+
+                audio.currentTime =
+                  clampTime(nextTime);
+
+              } catch (error) {
+
+                console.error(
+                  "Audio seek error:",
+                  error
+                );
+
+              }
+
+
+              showStatus(
+                "-2s"
+              );
+
+            }
+
+            break;
+
+
+          /* +2 seconds */
+
+          case "6":
+
+            e.preventDefault();
+
+
+            if (hasAudioSource()) {
+
+              const current =
+                Number(audio.currentTime);
+
+
+              const safeCurrent =
+                Number.isFinite(current)
+                  ? current
+                  : 0;
+
+
+              const total =
+                getFiniteDuration();
+
+
+              const requested =
+                safeCurrent + 2;
+
+
+              const nextTime =
+                total > 0
+                  ? Math.min(
+                      total,
+                      requested
+                    )
+                  : Math.max(
+                      0,
+                      requested
+                    );
+
+
+              try {
+
+                audio.currentTime =
+                  clampTime(nextTime);
+
+              } catch (error) {
+
+                console.error(
+                  "Audio seek error:",
+                  error
+                );
+
+              }
+
+
+              showStatus(
+                "+2s"
+              );
+
+            }
+
+            break;
+
+
+          /* START */
+
+          case "0":
+
+            e.preventDefault();
+
+
+            if (hasAudioSource()) {
+
+              try {
+
+                audio.currentTime = 0;
+
+              } catch (error) {
+
+                console.error(
+                  "Audio seek error:",
+                  error
+                );
+
+              }
+
+
+              showStatus(
+                "Boshiga"
+              );
+
+            }
+
+            break;
+
+
+          /* VOLUME DOWN */
+
+          case "2":
+
+            e.preventDefault();
+
+
+            audio.volume =
+              Math.max(
+                0,
+                audio.volume - 0.1
+              );
+
+
+            volume.value =
+              String(audio.volume);
+
+
+            if (audio.volume > 0) {
+
+              previousVolume =
+                audio.volume;
+
+            }
+
+
+            updateMuteIcon(
+              audio.volume
+            );
+
+            break;
+
+
+          /* VOLUME UP */
+
+          case "8":
+
+            e.preventDefault();
+
+
+            audio.volume =
+              Math.min(
+                1,
+                audio.volume + 0.1
+              );
+
+
+            volume.value =
+              String(audio.volume);
+
+
+            if (audio.volume > 0) {
+
+              previousVolume =
+                audio.volume;
+
+            }
+
+
+            updateMuteIcon(
+              audio.volume
+            );
+
+            break;
+
+
+          /* LOOP */
+
+          case "9":
+
+            e.preventDefault();
+
+            loopBtn.click();
+
+            break;
+
+
+          /* PLAYLIST: KEYINGI / OLDINGI AUDIO, RO'YXAT */
+
+          case "n":
+          case "N":
+
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+
+              e.preventDefault();
+
+              nextAudio();
+
+            }
+
+            break;
+
+          case "p":
+          case "P":
+
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+
+              e.preventDefault();
+
+              previousAudio();
+
+            }
+
+            break;
+
+          case "l":
+          case "L":
+
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+
+              e.preventDefault();
+
+              setPlaylistOpen(
+                playlistPanel.classList.contains("hidden")
+              );
+
+            }
+
+            break;
+
+          case "Escape":
+
+            if (!playlistPanel.classList.contains("hidden")) {
+
+              e.preventDefault();
+
+              setPlaylistOpen(false);
+
+            }
+
+            break;
+
+          /* MUTE */
+
+          case "m":
+          case "M":
+
+            e.preventDefault();
+
+            muteBtn.click();
+
+            break;
+
+
+          /* RESET SPEED */
+
+          case "/":
+
+            e.preventDefault();
+
+
+            speedIndex =
+              speeds.indexOf(1);
+
+
+            updateSpeed();
+
+            break;
+
+
+          /* NEXT SPEED */
+
+          case "*":
+
+            e.preventDefault();
+
+
+            speedIndex =
+              (
+                speedIndex + 1
+              ) %
+              speeds.length;
+
+
+            updateSpeed();
+
+            break;
+
+
+          /* =================================================
+             PDF PAGE NAVIGATION
+          ================================================= */
+
+          case "ArrowLeft":
+
+            if (pdfDoc) {
+
+              e.preventDefault();
+
+              goToPage(
+                pageNum - 1
+              );
+
+            }
+
+            break;
+
+
+          case "ArrowRight":
+
+            if (pdfDoc) {
+
+              e.preventDefault();
+
+              goToPage(
+                pageNum + 1
+              );
+
+            }
+
+            break;
+          
+          case "ArrowUp":
+
+  if (pdfDoc) {
+
+    e.preventDefault();
+
+    navLock = false;
+
+    pdfContainer.scrollBy({
+      top: -100,
+      left: 0,
+      behavior: "smooth"
+    });
+
+  }
+
+  break;
+
+
+case "ArrowDown":
+
+  if (pdfDoc) {
+
+    e.preventDefault();
+
+    navLock = false;
+
+    pdfContainer.scrollBy({
+      top: 100,
+      left: 0,
+      behavior: "smooth"
+    });
+
+  }
+
+  break;
+
+
+          case "Home":
+
+            if (pdfDoc) {
+
+              e.preventDefault();
+
+              goToPage(1);
+
+            }
+
+            break;
+
+
+          case "End":
+
+            if (pdfDoc) {
+
+              e.preventDefault();
+
+              goToPage(
+                pdfDoc.numPages
+              );
+
+            }
+
+            break;
+
+
+          /* =================================================
+             PDF ZOOM
+          ================================================= */
+
+          case "+":
+
+          case "=":
+
+            if (
+              !e.ctrlKey &&
+              !e.metaKey
+            ) {
+
+              e.preventDefault();
+
+              changeZoom(
+                ZOOM_STEP
+              );
+
+            }
+
+            break;
+
+
+          case "-":
+
+          case "_":
+
+            if (
+              !e.ctrlKey &&
+              !e.metaKey
+            ) {
+
+              e.preventDefault();
+
+              changeZoom(
+                -ZOOM_STEP
+              );
+
+            }
+
+            break;
+
+        }
+
+      }
+    );
+
+
+    /* =======================================================
+       SPACE (keyup) — fokusdagi tugma qo'shimcha "click" bermasin
+    ======================================================== */
+
+    document.addEventListener(
+      "keyup",
+      (e) => {
+
+        if (e.code !== "Space") {
+          return;
+        }
+
+        const target =
+          e.target;
+
+        const tag =
+          target &&
+          typeof target.tagName === "string"
+            ? target.tagName.toUpperCase()
+            : "";
+
+        if (
+          tag === "INPUT" ||
+          tag === "SELECT" ||
+          tag === "TEXTAREA" ||
+          (
+            target &&
+            target.isContentEditable
+          )
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+
+      }
+    );
+
+    /* =======================================================
+       CLEANUP
+    ======================================================== */
+
+    window.addEventListener(
+      "beforeunload",
+      () => {
+
+        clearTimeout(
+          statusTimer
+        );
+
+
+        if (audioFileURL) {
+
+          URL.revokeObjectURL(
+            audioFileURL
+          );
+
+          audioFileURL = null;
+
+        }
+
+
+        if (
+          pdfDoc &&
+          typeof pdfDoc.destroy === "function"
+        ) {
+
+          try {
+
+            pdfDoc.destroy();
+
+          } catch (error) {
+
+            console.error(
+              "PDF cleanup error:",
+              error
+            );
+
+          }
+
+        }
+
+      }
+    );
+
+
+    /* =======================================================
+       INITIAL STATE
+    ======================================================== */
+
+    updatePdfButtons();
+
+    updatePlayIcon();
+
+    updateMuteIcon(
+      audio.volume
+    );
+
+    updateLoopButton();
+
+    updateSpeed();
+
+  </script>
+
+</body>
+</html>
